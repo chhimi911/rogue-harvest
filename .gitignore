@@ -1,0 +1,14 @@
+node_modules/
+dist/
+.DS_Store
+.env
+!.env.example
+npm-debug.log*
+*.local
+*.tsbuildinfo
+.vite/
+vite.config.*.timestamp-*
+vite.config.*.mjs
+coverage/
+test-results/
+playwright-report/
