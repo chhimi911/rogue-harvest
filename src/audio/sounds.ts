@@ -25,6 +25,7 @@ type SoundPreferences = {
 
 const listeners = new Set<(preferences: SoundPreferences) => void>();
 const lastPlayed: Partial<Record<SoundName, number>> = {};
+const activeSounds = new Set<{ audio: HTMLAudioElement; name: SoundName }>();
 
 let hasUserInteracted = false;
 let muted = false;
@@ -64,6 +65,18 @@ const notify = () => {
   listeners.forEach((listener) => listener(preferences));
 };
 
+const soundVolume = (name: SoundName) => clampVolume(muted ? 0 : volume * soundMap[name].volume);
+
+const updateActiveSoundVolumes = () => {
+  activeSounds.forEach(({ audio, name }) => {
+    audio.volume = soundVolume(name);
+    if (muted) {
+      audio.pause();
+      audio.currentTime = 0;
+    }
+  });
+};
+
 const initPreferences = () => {
   const preferences = readPreferences();
   muted = preferences.muted;
@@ -91,12 +104,14 @@ export const subscribeToSoundPreferences = (listener: (preferences: SoundPrefere
 
 export const setMuted = (nextMuted: boolean) => {
   muted = nextMuted;
+  updateActiveSoundVolumes();
   savePreferences();
   notify();
 };
 
 export const setVolume = (nextVolume: number) => {
   volume = clampVolume(nextVolume);
+  updateActiveSoundVolumes();
   savePreferences();
   notify();
 };
@@ -113,8 +128,13 @@ export const playSound = (name: SoundName) => {
   lastPlayed[name] = now;
   const audio = new Audio(config.src);
   audio.preload = "auto";
-  audio.volume = clampVolume(volume * config.volume);
+  audio.volume = soundVolume(name);
+  const activeSound = { audio, name };
+  activeSounds.add(activeSound);
+  audio.addEventListener("ended", () => activeSounds.delete(activeSound), { once: true });
+  audio.addEventListener("error", () => activeSounds.delete(activeSound), { once: true });
   audio.play().catch(() => {
+    activeSounds.delete(activeSound);
     // Browser autoplay and device audio policies should never break gameplay.
   });
 };

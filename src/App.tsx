@@ -72,7 +72,7 @@ function AudioControls() {
         {muted ? "Sound Off" : "Sound On"}
       </button>
       <label className="volume-control">
-        <span>Volume</span>
+        <span>Volume {Math.round(volume * 100)}%</span>
         <input
           type="range"
           min="0"

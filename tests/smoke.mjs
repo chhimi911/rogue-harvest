@@ -83,6 +83,8 @@ async function runSmoke() {
     await page.getByRole("heading", { name: "Rogue Harvest" }).waitFor();
     await page.getByRole("button", { name: /sound on/i }).click();
     await page.getByRole("button", { name: /sound off/i }).waitFor();
+    await page.getByLabel("Sound volume").fill("0.25");
+    await page.getByText("Volume 25%").waitFor();
     await page.getByRole("button", { name: /sound off/i }).click();
     await page.getByRole("button", { name: /sound on/i }).waitFor();
 
