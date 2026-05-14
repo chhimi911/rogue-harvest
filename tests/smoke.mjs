@@ -81,6 +81,10 @@ async function runSmoke() {
 
     await page.goto(baseUrl, { waitUntil: "networkidle" });
     await page.getByRole("heading", { name: "Rogue Harvest" }).waitFor();
+    await page.getByRole("button", { name: /sound on/i }).click();
+    await page.getByRole("button", { name: /sound off/i }).waitFor();
+    await page.getByRole("button", { name: /sound off/i }).click();
+    await page.getByRole("button", { name: /sound on/i }).waitFor();
 
     await page.getByRole("button", { name: /start run/i }).click();
     await page.getByRole("button", { name: /enter starter patch/i }).click();

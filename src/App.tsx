@@ -1,4 +1,6 @@
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
+import { playSound } from "./audio/sounds";
+import { useSound } from "./audio/useSound";
 import { cards, enemies, mapNodes, relics } from "./game/data";
 import { completeBattle, createRun, chooseReward, enterMap, rest, startCurrentNode, startRun } from "./game/run";
 import { endPlayerTurn, getCurrentIntent, playCard, statusLabels } from "./game/combat";
@@ -53,6 +55,35 @@ function StatusGlossary() {
         ))}
       </dl>
     </details>
+  );
+}
+
+function AudioControls() {
+  const { muted, setMuted, setVolume, volume } = useSound();
+
+  return (
+    <aside className="sound-controls" aria-label="Sound settings">
+      <button
+        className="sound-toggle"
+        type="button"
+        aria-pressed={muted}
+        onClick={() => setMuted(!muted)}
+      >
+        {muted ? "Sound Off" : "Sound On"}
+      </button>
+      <label className="volume-control">
+        <span>Volume</span>
+        <input
+          type="range"
+          min="0"
+          max="1"
+          step="0.05"
+          value={volume}
+          onChange={(event) => setVolume(Number(event.target.value))}
+          aria-label="Sound volume"
+        />
+      </label>
+    </aside>
   );
 }
 
@@ -380,24 +411,78 @@ function EndScreen({ kind, run, onRestart }: { kind: "victory" | "defeat"; run: 
 
 export default function App() {
   const [run, setRun] = useState<RunState>(() => createRun());
+  const lastScreenSoundRef = useRef(run.screen);
+  const lastWarningKeyRef = useRef("");
 
   const updateCombat = (updater: NonNullable<RunState["combat"]>) => setRun((current) => ({ ...current, combat: updater }));
 
-  if (run.screen === "title") return <TitleScreen onStart={() => setRun(startRun())} />;
-  if (run.screen === "hero") return <HeroScreen run={run} onContinue={() => setRun((current) => enterMap(current))} />;
-  if (run.screen === "map") return <MapScreen run={run} onNode={() => setRun((current) => startCurrentNode(current))} />;
-  if (run.screen === "rest") return <RestScreen run={run} onRest={() => setRun((current) => rest(current))} />;
-  if (run.screen === "reward") return <RewardScreen run={run} onChoose={(cardId) => setRun((current) => chooseReward(current, cardId))} />;
-  if (run.screen === "victory") return <EndScreen kind="victory" run={run} onRestart={() => setRun(createRun())} />;
-  if (run.screen === "defeat") return <EndScreen kind="defeat" run={run} onRestart={() => setRun(createRun())} />;
+  useEffect(() => {
+    if (run.screen === lastScreenSoundRef.current) return;
+    lastScreenSoundRef.current = run.screen;
+
+    if (run.screen === "victory") playSound("victory");
+    if (run.screen === "defeat") playSound("defeat");
+  }, [run.screen]);
+
+  useEffect(() => {
+    if (run.screen !== "battle" || !run.combat) return;
+
+    const node = mapNodes[run.currentNodeIndex];
+    const intent = getCurrentIntent(run.combat.enemy, run.combat.enemyIntentIndex);
+    const heavyAttack = intent.effects.some((effect) => effect.type === "damage" && (effect.value ?? 0) >= 10);
+    const bossStart = node?.type === "boss" && run.combat.turnNumber === 1 && run.combat.enemyIntentIndex === 0;
+    const warningKey = `${node?.id}-${run.combat.turnNumber}-${run.combat.enemyIntentIndex}`;
+
+    if ((bossStart || heavyAttack) && lastWarningKeyRef.current !== warningKey) {
+      lastWarningKeyRef.current = warningKey;
+      playSound("warning");
+    }
+  }, [run.combat, run.currentNodeIndex, run.screen]);
+
+  let screen;
+  if (run.screen === "title") {
+    screen = <TitleScreen onStart={() => { playSound("menu"); setRun(startRun()); }} />;
+  } else if (run.screen === "hero") {
+    screen = <HeroScreen run={run} onContinue={() => { playSound("menu"); setRun((current) => enterMap(current)); }} />;
+  } else if (run.screen === "map") {
+    screen = <MapScreen run={run} onNode={() => { playSound("menu"); setRun((current) => startCurrentNode(current)); }} />;
+  } else if (run.screen === "rest") {
+    screen = <RestScreen run={run} onRest={() => { playSound("menu"); setRun((current) => rest(current)); }} />;
+  } else if (run.screen === "reward") {
+    screen = (
+      <RewardScreen
+        run={run}
+        onChoose={(cardId) => {
+          playSound("loot");
+          setRun((current) => chooseReward(current, cardId));
+        }}
+      />
+    );
+  } else if (run.screen === "victory") {
+    screen = <EndScreen kind="victory" run={run} onRestart={() => { playSound("menu"); setRun(createRun()); }} />;
+  } else if (run.screen === "defeat") {
+    screen = <EndScreen kind="defeat" run={run} onRestart={() => { playSound("menu"); setRun(createRun()); }} />;
+  } else {
+    screen = (
+      <BattleScreen
+        run={run}
+        onPlay={(cardId) => {
+          if (!run.combat) return;
+          const nextCombat = playCard(run.combat, cardId, run.relics);
+          if (nextCombat !== run.combat) playSound("card");
+          updateCombat(nextCombat);
+        }}
+        onEndTurn={() => run.combat && updateCombat(endPlayerTurn(run.combat, run.relics))}
+        onContinue={() => { playSound("menu"); setRun((current) => completeBattle(current)); }}
+        onDefeat={() => { playSound("menu"); setRun((current) => ({ ...current, screen: "defeat", playerHp: 0 })); }}
+      />
+    );
+  }
 
   return (
-    <BattleScreen
-      run={run}
-      onPlay={(cardId) => run.combat && updateCombat(playCard(run.combat, cardId, run.relics))}
-      onEndTurn={() => run.combat && updateCombat(endPlayerTurn(run.combat, run.relics))}
-      onContinue={() => setRun((current) => completeBattle(current))}
-      onDefeat={() => setRun((current) => ({ ...current, screen: "defeat", playerHp: 0 }))}
-    />
+    <>
+      <AudioControls />
+      {screen}
+    </>
   );
 }

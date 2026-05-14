@@ -12,3 +12,4 @@ vite.config.*.mjs
 coverage/
 test-results/
 playwright-report/
+rogue-harvest-audio-handoff/
